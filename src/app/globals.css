@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  @apply bg-gray-950 text-gray-100 antialiased;
+}
+
+/* Reusable bits */
+@layer components {
+  .nav-link {
+    @apply px-3 py-1.5 rounded-md text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-800 transition-colors;
+  }
+  .nav-link-active {
+    @apply bg-blue-600/20 text-blue-300;
+  }
+  .card {
+    @apply bg-card border border-gray-800 rounded-lg shadow;
+  }
+  .input {
+    @apply w-full p-2 mb-2 bg-gray-700 rounded border border-gray-600 text-sm focus:outline-none focus:border-blue-400;
+  }
+  .btn {
+    @apply px-4 py-2 rounded font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-blue-600 hover:bg-blue-500 text-white;
+  }
+  .btn-success {
+    @apply btn bg-green-600 hover:bg-green-500 text-white;
+  }
+  .btn-danger {
+    @apply btn bg-red-700 hover:bg-red-600 text-white;
+  }
+  .btn-ghost {
+    @apply btn bg-gray-700 hover:bg-gray-600 text-gray-100;
+  }
+}
+
+/* ReactFlow dark theme tweaks */
+.react-flow__minimap {
+  background-color: #111827 !important;
+}
+.react-flow__controls-button {
+  background: #1f2937 !important;
+  border-bottom: 1px solid #374151 !important;
+  fill: #d1d5db !important;
+}

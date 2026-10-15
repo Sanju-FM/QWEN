@@ -1,0 +1,184 @@
+// ============================================================================
+// KEZAD Mamourah — Project QHSE Plan · production database schema
+// PostgreSQL + Prisma ORM
+//
+// Setup:
+//   DATABASE_URL="postgresql://user:pass@host:5432/kezad_qhse?schema=public"
+//   npx prisma migrate dev --name init     # local
+//   npx prisma migrate deploy              # CI / prod
+//   npx prisma db seed                     # loads the mind map (see prisma/seed.ts)
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/* ------------------------------- QHSE tree ------------------------------- */
+
+enum NodeStatus {
+  draft
+  active
+  review
+  closed
+}
+
+model QHSENode {
+  id          String     @id @default(cuid())
+  /// stable slug used by deep links, e.g. "impl-1"
+  key         String     @unique
+  parentId    String?
+  parent      QHSENode?  @relation("Tree", fields: [parentId], references: [id], onDelete: Cascade)
+  children    QHSENode[] @relation("Tree")
+  title       String
+  description String?
+  owner       String? // user email or FK to User when auth is enabled
+  dueDate     DateTime?
+  status      NodeStatus @default(draft)
+  /// list of file URLs (SharePoint / S3 / Drive links)
+  evidence    String[]   @default([])
+  notes       String?
+  sortOrder   Int        @default(0)
+  updatedAt   DateTime   @updatedAt
+  createdAt   DateTime   @default(now())
+
+  auditLogs   AuditLog[]
+
+  @@index([parentId])
+  @@index([status])
+  @@index([owner])
+  @@index([dueDate])
+  @@map("qhse_nodes")
+}
+
+/* -------------------------------- webhooks ------------------------------- */
+
+enum WebhookEvent {
+  node_updated
+  node_created
+  export_done
+  incident_reported
+}
+
+model Webhook {
+  id            String           @id @default(cuid())
+  name          String
+  url           String
+  secret        String? // encrypt at rest in prod (e.g. libsodium sealed box)
+  events        WebhookEvent[]
+  active        Boolean          @default(true)
+  lastTriggered DateTime?
+  failureCount  Int              @default(0)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  deliveries DeliveryLog[]
+
+  @@map("webhooks")
+}
+
+model DeliveryLog {
+  id         String        @id @default(cuid())
+  webhookId  String
+  webhook    Webhook       @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event      WebhookEvent
+  nodeId     String?
+  payload    Json
+  ok         Boolean
+  httpStatus Int?
+  error      String?
+  attempts   Int           @default(1)
+  durationMs Int?
+  createdAt  DateTime      @default(now())
+
+  @@index([webhookId, createdAt])
+  @@index([event, createdAt])
+  @@map("webhook_delivery_logs")
+}
+
+/* ------------------------------ incidents ------------------------------ */
+
+enum IncidentSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+model Incident {
+  id          String           @id @default(cuid())
+  ref         String           @unique // e.g. "INC-2026-0001"
+  nodeId      String? // related plan node (QHSENode.id)
+  title       String
+  description String?
+  severity    IncidentSeverity @default(low)
+  reportedBy  String?
+  occurredAt  DateTime         @default(now())
+  closedAt    DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@index([nodeId])
+  @@index([severity])
+  @@map("incidents")
+}
+
+/* --------------------------- exports & auditing ------------------------- */
+
+enum ExportFormat {
+  pdf
+  excel
+  csv
+  json
+}
+
+model ExportRecord {
+  id        String       @id @default(cuid())
+  format    ExportFormat
+  filename  String
+  sizeBytes Int?
+  createdBy String?
+  createdAt DateTime     @default(now())
+
+  @@index([createdAt])
+  @@map("export_records")
+}
+
+model AuditLog {
+  id       String    @id @default(cuid())
+  nodeId   String?
+  node     QHSENode? @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+  action   String // update | create | delete | status.change …
+  actor    String? // user email / id
+  before   Json?
+  after    Json?
+  at       DateTime  @default(now())
+
+  @@index([nodeId, at])
+  @@map("audit_logs")
+}
+
+/* ------------------------ optional auth (NextAuth) ---------------------- */
+
+enum Role {
+  admin
+  hse_officer
+  viewer
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  name               String?
+  role               Role     @default(viewer)
+  image              String?
+  emailVerified      DateTime?
+  passwordHash       String? // credentials provider (optional)
+  // NextAuth adapter tables can be added separately if using DB sessions
+  createdAt          DateTime @default(now())
+
+  @@map("users")
+}
